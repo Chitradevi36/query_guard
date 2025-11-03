@@ -7,42 +7,32 @@ require "query_guard/subscriber"
 require "query_guard/middleware"
 
 module QueryGuard
-  class << self
-    attr_accessor :client, :config
+  mattr_accessor :config, default: Config.new
+  mattr_accessor :client
 
-    def config
-      @config ||= Config.new
+  def self.configure
+    yield(config)
+    self.client = Client.new(
+      base_url: config.base_url,
+      api_key:  config.api_key,
+      project:  config.project,
+      env:      config.env
+    )
+    self
+  end
+
+  def self.install!(app = nil)
+    # Install SQL subscriber once
+    Subscriber.install!(config)
+
+    # Install middleware (Rails or Rack)
+    if defined?(Rails) && Rails.respond_to?(:application) && Rails.application
+      # Use a Railtie-less insert for safety if called early
+      Rails.application.config.middleware.use(QueryGuard::Middleware, config)
+    elsif app
+      app.use(QueryGuard::Middleware, config)
     end
-
-    def configure
-      yield config
-      self
-    end
-
-    def configure
-      config ||= Config.new
-      yield(config)
-      client = Client.new(
-        base_url: config.base_url,
-        api_key:  config.api_key,
-        project:  config.project,
-        env:      config.env
-      )
-    end
-
-    def install!(app = nil)
-      # Install SQL subscriber once
-      Subscriber.install!(config)
-
-      # Install middleware (Rails or Rack)
-      if defined?(Rails) && Rails.respond_to?(:application) && Rails.application
-        # Use a Railtie-less insert for safety if called early
-        Rails.application.config.middleware.use(QueryGuard::Middleware, config)
-      elsif app
-        app.use(QueryGuard::Middleware, config)
-      end
-      self
-    end
+    self
   end
 end
 
