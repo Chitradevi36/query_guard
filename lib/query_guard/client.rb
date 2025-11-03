@@ -8,7 +8,7 @@ module QueryGuard
     DEFAULT_TIMEOUT = 5 # seconds
 
     def initialize(base_url:, api_key:, project:, env:)
-      @base_url = base_url.sub(%r{/\z}, "")
+      @base_url = base_url.sub(%r{/\z}, "") rescue ''
       @api_key  = api_key
       @project  = project
       @env      = env
