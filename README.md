@@ -8,6 +8,7 @@ Add to your Gemfile:
 
 ```ruby
 gem "query_guard"
+```
 
 ## ⚙️ Configuration File
 
@@ -22,6 +23,7 @@ Run this command inside your Rails app:
 
 ```bash
 touch config/initializers/query_guard.rb
+```
 
 ### 2️⃣ Add the following code inside that file:
 
@@ -58,3 +60,4 @@ QueryGuard.configure do |config|
   # Prefix for log messages in Rails logs
   config.log_prefix = "[QueryGuard]"
 end
+```
