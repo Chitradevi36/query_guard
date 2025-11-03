@@ -1,4 +1,6 @@
 # frozen_string_literal: true
+require "active_support"
+require "active_support/notifications"
 require "query_guard/version"
 require "query_guard/config"
 require "query_guard/subscriber"
@@ -6,6 +8,8 @@ require "query_guard/middleware"
 
 module QueryGuard
   class << self
+    mattr_accessor :client, :config
+
     def config
       @config ||= Config.new
     end
@@ -13,6 +17,17 @@ module QueryGuard
     def configure
       yield config
       self
+    end
+
+    def configure
+      config ||= Config.new
+      yield(config)
+      client = Client.new(
+        base_url: config.base_url,
+        api_key:  config.api_key,
+        project:  config.project,
+        env:      config.env
+      )
     end
 
     def install!(app = nil)
