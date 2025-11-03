@@ -8,7 +8,7 @@ require "query_guard/middleware"
 
 module QueryGuard
   class << self
-    mattr_accessor :client, :config
+    attr_accessor :client, :config
 
     def config
       @config ||= Config.new
