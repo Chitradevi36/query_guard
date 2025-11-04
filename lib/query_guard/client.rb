@@ -8,17 +8,17 @@ module QueryGuard
     DEFAULT_TIMEOUT = 5 # seconds
 
     def initialize(base_url:, api_key:, project:, env:)
-      @base_url = base_url.sub(%r{/\z}, "") rescue ''
+      @base_url = base_url&.sub(%r{/\z}, "") || ""
       @api_key  = api_key
       @project  = project
       @env      = env
     end
 
-    # Example call used by your Subscriber/Middleware
+    # Bulk events POST
     def post(path, payload)
       uri = URI.parse("#{@base_url}#{path}")
       req = Net::HTTP::Post.new(uri)
-      req["Content-Type"] = "application/json"
+      req["Content-Type"]  = "application/json"
       req["Authorization"] = "Bearer #{@api_key}" if @api_key
       req.body = JSON.generate(payload.merge(project: @project, env: @env))
 
@@ -28,9 +28,7 @@ module QueryGuard
       http.read_timeout = DEFAULT_TIMEOUT
 
       res = http.request(req)
-      unless res.is_a?(Net::HTTPSuccess)
-        warn "[QueryGuard] POST #{uri} -> #{res.code} #{res.body}"
-      end
+      warn "[QueryGuard] POST #{uri} -> #{res.code} #{res.body}" unless res.is_a?(Net::HTTPSuccess)
       res
     rescue => e
       warn "[QueryGuard] HTTP error: #{e.class}: #{e.message}"
