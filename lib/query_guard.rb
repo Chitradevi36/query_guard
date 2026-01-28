@@ -42,6 +42,10 @@ module QueryGuard
 
       self
     end
+
+    def exporter
+      @exporter ||= QueryGuard::Exporter.new(config)
+    end
   end
 end
 

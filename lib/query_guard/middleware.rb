@@ -38,7 +38,9 @@ module QueryGuard
         total_duration_ms: 0.0,
         violations: [],
         fingerprints: Hash.new(0),
-        response_bytes: 0
+        response_bytes: 0,
+        queries: [],
+        request: {}    
       }
 
       status, headers, body = @app.call(env)
@@ -82,6 +84,7 @@ module QueryGuard
       end
 
       # post-request checks (unusual pattern + exfil based on response bytes)
+      QueryGuard.exporter.export!(stats) if QueryGuard.respond_to?(:exporter)
       QueryGuard::Security.post_request_checks!(env, stats, @config)
 
       return if violations.empty?

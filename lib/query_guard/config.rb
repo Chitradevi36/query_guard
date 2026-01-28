@@ -73,6 +73,11 @@ module QueryGuard
       end
 
       @store = nil # will default to QueryGuard::Store.new
+
+      @export_mode              = :async
+      @export_queries            = :all
+      @max_query_events_per_req  = 200
+      @origin_app                = nil
     end
 
     def enabled?(env)
