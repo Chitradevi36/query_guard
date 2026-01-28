@@ -47,6 +47,15 @@ module QueryGuard
             stats[:violations] << { type: :possible_data_exfiltration_query, sql: sql }
           end
         end
+
+        max = config.max_query_events_per_req || 200
+        if stats[:queries].length < max
+          stats[:queries] << {
+            sql: sql,
+            duration_ms: duration_ms.round(2),
+            occurred_at: Time.now.utc.iso8601
+          }
+        end
       end
 
       @installed = true
