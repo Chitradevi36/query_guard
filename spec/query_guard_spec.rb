@@ -5,7 +5,13 @@ RSpec.describe QueryGuard do
     expect(QueryGuard::VERSION).not_to be nil
   end
 
-  it "does something useful" do
-    expect(false).to eq(true)
+  it "provides a configuration interface" do
+    expect(QueryGuard.config).to be_a(QueryGuard::Config)
+  end
+
+  it "provides a trace interface" do
+    result, report = QueryGuard.trace("test") { "result" }
+    expect(result).to eq("result")
+    expect(report).to be_a(QueryGuard::Trace::Report)
   end
 end

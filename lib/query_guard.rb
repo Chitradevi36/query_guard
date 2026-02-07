@@ -4,6 +4,7 @@ require "active_support/notifications"
 require "query_guard/version"
 require "query_guard/budget"
 require "query_guard/fingerprint"
+require "query_guard/trace"
 require "query_guard/config"
 require "query_guard/store"
 require "query_guard/security"
@@ -47,6 +48,12 @@ module QueryGuard
 
     def exporter
       @exporter ||= QueryGuard::Exporter.new(config)
+    end
+
+    # Trace a block of code and capture query stats.
+    # Returns [result, report] tuple.
+    def trace(label, context: {}, &block)
+      Trace.trace(label, context: context, &block)
     end
   end
 end
