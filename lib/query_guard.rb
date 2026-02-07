@@ -2,6 +2,8 @@
 require "active_support"
 require "active_support/notifications"
 require "query_guard/version"
+require "query_guard/budget"
+require "query_guard/fingerprint"
 require "query_guard/config"
 require "query_guard/store"
 require "query_guard/security"

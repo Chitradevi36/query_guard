@@ -1,4 +1,6 @@
 # frozen_string_literal: true
+require_relative "budget"
+
 module QueryGuard
   class Config
     attr_accessor :enabled_environments, :max_queries_per_request,
@@ -27,6 +29,9 @@ module QueryGuard
 
     # Storage for rolling counters (defaults to in-memory)
     attr_accessor :store
+
+    # Budget system
+    attr_reader :budget
 
     def initialize
       @enabled_environments      = %i[development test]
@@ -78,6 +83,9 @@ module QueryGuard
       @export_queries            = :all
       @max_query_events_per_req  = 200
       @origin_app                = nil
+
+      # Budget system
+      @budget = Budget.new
     end
 
     def enabled?(env)
