@@ -9,8 +9,8 @@ module QueryGuard
       return if @installed
       @config = config
       @subscriber = ActiveSupport::Notifications.subscribe(SQL_EVENT) do |_, started, finished, _, payload|
-        stats = Thread.current[:query_guard_stats]
-        next unless stats # only track inside our middleware window
+        context = Thread.current[:query_guard_context]
+        next unless context # only track inside our middleware window
 
         # Skip schema and ignored
         name = payload[:name].to_s
@@ -20,6 +20,18 @@ module QueryGuard
         next if config.ignored_sql.any? { |r| r === sql }
 
         duration_ms = (finished - started) * 1000.0
+        
+        # Collect query into context (new behavior)
+        context.add_query(
+          sql: sql,
+          duration_ms: duration_ms,
+          name: name,
+          started_at: Time.at(started),
+          finished_at: Time.at(finished)
+        )
+
+        # Legacy: Also update Thread.current stats for backward compatibility
+        stats = Thread.current[:query_guard_stats] ||= { count: 0, total_duration_ms: 0.0, violations: [] }
         stats[:count] += 1
         stats[:total_duration_ms] += duration_ms
 

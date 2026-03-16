@@ -1,0 +1,160 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://queryguard.example.com/schemas/batch-v1.0.json",
+  "title": "QueryGuard Batch Report",
+  "description": "Schema for batch ingestion of multiple QueryGuard reports (v1.0)",
+  "type": "object",
+  "required": [
+    "batch_version",
+    "batch_type",
+    "batch_id",
+    "correlation_id",
+    "created_at",
+    "report_count",
+    "reports",
+    "pagination",
+    "stats"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "batch_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Batch schema version"
+    },
+    "batch_type": {
+      "type": "string",
+      "const": "batch",
+      "description": "Always 'batch' for bulk ingestion"
+    },
+    "batch_id": {
+      "type": "string",
+      "pattern": "^batch-[a-f0-9]{16}$",
+      "description": "Unique identifier for this batch"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^corr-[a-f0-9]{16}$",
+      "description": "Correlation ID linking all reports in this batch across systems"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "rfc3339",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "description": "When the batch was created (ISO8601 UTC)"
+    },
+    "report_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of reports included in this batch"
+    },
+    "reports": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Array of individual QueryGuard reports (v1.0 schema)",
+      "items": {
+        "$ref": "json-schema-report-v1.0.json"
+      }
+    },
+    "pagination": {
+      "type": "object",
+      "required": [
+        "total_reports",
+        "page",
+        "page_size",
+        "has_more"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "total_reports": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total reports across all pages"
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Current page number (1-indexed)"
+        },
+        "page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of reports on this page"
+        },
+        "has_more": {
+          "type": "boolean",
+          "description": "Whether more pages are available"
+        },
+        "continuation_token": {
+          "type": ["string", "null"],
+          "description": "Opaque token for cursor-based pagination"
+        },
+        "next_page_token": {
+          "type": ["string", "null"],
+          "description": "Token to retrieve the next page"
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "required": [
+        "total_findings",
+        "findings_by_severity",
+        "reports_by_type",
+        "processing_time_ms"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "total_findings": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Aggregate findings across all reports in batch"
+        },
+        "findings_by_severity": {
+          "type": "object",
+          "required": ["critical", "error", "warn", "info"],
+          "additionalProperties": false,
+          "properties": {
+            "critical": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "error": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "warn": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "info": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "reports_by_type": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "Count of reports by type (analyze, check, etc)",
+          "properties": {
+            "analyze": {
+              "type": "integer"
+            },
+            "check": {
+              "type": "integer"
+            }
+          }
+        },
+        "processing_time_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Time to process entire batch"
+        }
+      }
+    }
+  }
+}

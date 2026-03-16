@@ -1,0 +1,24 @@
+name: QueryGuard - Minimal Example
+
+# Minimal workflow: Fast feedback without database
+# Use this for: Quick checks on feature branches
+
+on:
+  pull_request:
+    paths:
+      - 'db/migrate/**'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+
+      - name: Check migrations quickly
+        run: bundle exec queryguard check db/migrate --threshold error

@@ -8,8 +8,8 @@ Gem::Specification.new do |spec|
   spec.authors = ["Chitradevi36"]
   spec.email = ["chitra.rajaguru123@gmail.com"]
 
-  spec.summary = "Guardrails for ActiveRecord queries per request (count, slow SQL, SELECT *)."
-  spec.description = "query_guard tracks SQL in Rails requests and warns/raises on excessive count, slow queries, or SELECT * usage."
+  spec.summary = "Database migration safety analyzer for Rails"
+  spec.description = "Automatically detect risky migration patterns (unsafe column removal, locking operations, data loss) before they reach production."
   spec.homepage = "https://github.com/Chitradevi36/query_guard"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.0.0"
@@ -20,18 +20,18 @@ Gem::Specification.new do |spec|
   spec.metadata["source_code_uri"] =  spec.homepage
   spec.metadata["changelog_uri"] = "#{spec.homepage}/blob/main/CHANGELOG.md"
   spec.add_development_dependency "rake", "~> 13.2"
-  spec.add_dependency "activesupport", ">= 5.2", "< 8.0"  
+  spec.add_dependency "activesupport", ">= 5.2", "< 8.0"
+  spec.add_dependency "rails", ">= 5.2", "< 8.0"  
 
 
   # Specify which files should be added to the gem when it is released.
-  # The `git ls-files -z` loads the files in the RubyGem that have been added into git.
-  gemspec = File.basename(__FILE__)
-  spec.files = IO.popen(%w[git ls-files -z], chdir: __dir__, err: IO::NULL) do |ls|
-    ls.readlines("\x0", chomp: true).reject do |f|
-      (f == gemspec) ||
-        f.start_with?(*%w[bin/ test/ spec/ features/ .git appveyor Gemfile])
-    end
-  end
+  spec.files = Dir.glob("lib/**/*") + Dir.glob("exe/**/*") + Dir.glob("sig/**/*") + %w[
+    README.md
+    LICENSE.txt
+    CHANGELOG.md
+    INDEX.md
+    DESIGN.md
+  ]
   spec.bindir = "exe"
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]

@@ -1,0 +1,267 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://queryguard.example.com/schemas/report-v1.0.json",
+  "title": "QueryGuard Analysis Report",
+  "description": "Complete schema for QueryGuard JSON reports (v1.0) for SaaS platform ingestion",
+  "type": "object",
+  "required": [
+    "report_version",
+    "report_type",
+    "timestamp",
+    "tool",
+    "source",
+    "summary",
+    "findings",
+    "metadata"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "report_version": {
+      "type": "string",
+      "pattern": "^1\\.\\d+$",
+      "description": "Schema version (1.0, 1.1, etc). Breaking changes increment major version.",
+      "examples": ["1.0"]
+    },
+    "report_type": {
+      "type": "string",
+      "enum": ["analyze", "check"],
+      "description": "Type of analysis: 'analyze' for detailed report, 'check' for pass/fail gate"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "rfc3339",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "description": "ISO8601 timestamp when report was generated, always UTC with Z suffix"
+    },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "const": "queryguard",
+          "description": "Tool identifier (always 'queryguard')"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(\\d+\\.\\d+\\.\\d+|unknown)$",
+          "description": "Semantic version of QueryGuard tool",
+          "examples": ["0.5.0", "unknown"]
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": ["path", "command"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Absolute path to the analyzed directory"
+        },
+        "command": {
+          "type": "string",
+          "enum": ["analyze", "check"],
+          "description": "CLI command that generated this report"
+        },
+        "threshold": {
+          "type": "string",
+          "enum": ["info", "warn", "error", "critical"],
+          "description": "Risk threshold (present only in 'check' reports)"
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "total_findings",
+        "by_severity",
+        "files_analyzed",
+        "files_with_findings"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "total_findings": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of findings detected"
+        },
+        "by_severity": {
+          "type": "object",
+          "required": ["critical", "error", "warn", "info"],
+          "additionalProperties": false,
+          "properties": {
+            "critical": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "error": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "warn": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "info": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "files_analyzed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total files analyzed"
+        },
+        "files_with_findings": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of files that contain findings"
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Array of findings (may be empty)",
+      "items": {
+        "$ref": "#/definitions/finding"
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "total_files_checked",
+        "execution_time_ms"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "total_files_checked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "has_index_suggestions": {
+          "type": "boolean"
+        },
+        "has_migration_steps": {
+          "type": "boolean"
+        },
+        "execution_time_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Time to generate report in milliseconds"
+        }
+      }
+    },
+    "tracing": {
+      "type": "object",
+      "required": ["request_id", "trace_id", "span_id"],
+      "additionalProperties": false,
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{16}$",
+          "description": "Unique request ID for tracking (16 hex chars)"
+        },
+        "trace_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{16}$",
+          "description": "Distributed trace ID for OpenTelemetry (16 hex chars)"
+        },
+        "span_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}$",
+          "description": "Span ID for this analysis operation (8 hex chars)"
+        },
+        "parent_span_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-f0-9]{8}$",
+          "description": "Optional parent span ID for nested operations"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "finding": {
+      "title": "Single Finding",
+      "type": "object",
+      "required": [
+        "id",
+        "analyzer",
+        "rule",
+        "severity",
+        "title",
+        "description"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{16}$",
+          "description": "Deterministic finding ID (16 hex chars) for deduplication"
+        },
+        "analyzer": {
+          "type": "string",
+          "description": "Name of the analyzer that found this issue",
+          "examples": [
+            "query_risk_analyzer",
+            "slow_query_analyzer",
+            "select_star_analyzer",
+            "query_count_analyzer"
+          ]
+        },
+        "rule": {
+          "type": "string",
+          "description": "Specific rule violated",
+          "examples": [
+            "remove_column",
+            "select_star",
+            "duration_exceeded",
+            "count_exceeded"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "error", "warn", "info"],
+          "description": "Impact severity level"
+        },
+        "title": {
+          "type": "string",
+          "description": "Human-readable title of the finding"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed explanation of the finding"
+        },
+        "file_path": {
+          "type": ["string", "null"],
+          "description": "File path where the issue was found"
+        },
+        "line_number": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "Line number in the file where the issue starts"
+        },
+        "recommendation": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string"
+          },
+          "description": "Array of recommended fixes or clarifications"
+        },
+        "metadata": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "description": "Custom metadata about the finding (no internal Ruby objects)",
+          "examples": [
+            {
+              "table_name": "users",
+              "estimated_table_rows": 150000
+            }
+          ]
+        }
+      }
+    }
+  }
+}
