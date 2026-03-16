@@ -1,0 +1,91 @@
+name: QueryGuard - Standard Example
+
+# Standard workflow: Full analysis with database awareness
+# Use this for: Production-grade safety checks
+# Accuracy: High (table size aware)
+# Speed: ~40 seconds
+
+on:
+  pull_request:
+    paths:
+      - 'db/migrate/**'
+      - 'Gemfile'
+      - 'Gemfile.lock'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'db/migrate/**'
+
+jobs:
+  analyze:
+    name: Analyze migrations
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+
+      - name: Analyze migrations
+        run: bundle exec queryguard analyze db/migrate --verbose
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+
+  check:
+    name: Check migration safety
+    needs: analyze
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+
+      - name: Check if safe to deploy
+        run: bundle exec queryguard check db/migrate --threshold error
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+
+      - name: Report results
+        if: always()
+        run: |
+          if [ $? -eq 0 ]; then
+            echo "✅ Migrations passed safety checks" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Risky migrations detected" >> $GITHUB_STEP_SUMMARY
+            echo "See 'Check if safe to deploy' step above for details" >> $GITHUB_STEP_SUMMARY
+          fi

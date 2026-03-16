@@ -32,28 +32,32 @@ module QueryGuard
     def call(env)
       return @app.call(env) unless @config.enabled?(rails_env)
 
-      Thread.current[:query_guard_stats] = {
-        request_id: SecureRandom.hex(8),
-        count: 0,
-        total_duration_ms: 0.0,
+      # Initialize new Context for this request
+      context = Core::Context.new
+      Thread.current[:query_guard_context] = context
+      
+      # Legacy: Also initialize old stats hash for backward compatibility
+      Thread.current[:query_guard_stats] = { 
+        count: 0, 
+        total_duration_ms: 0.0, 
         violations: [],
-        fingerprints: Hash.new(0),
-        response_bytes: 0,
-        queries: [],
-        request: {}    
+        response_bytes: 0 
       }
 
       status, headers, body = @app.call(env)
-
-      # Wrap body to count bytes without consuming it
+      
+      # Wrap body to track response bytes
       proxied_body = BodyProxy.new(body, Thread.current[:query_guard_stats])
-
-      # After response enumeration, Rack server will call #each. We still want checks.
-      # So we run checks here too (response_bytes may still be 0 for streamed responses).
-      check_and_report!(env)
-
+      
+      # Run all registered analyzers
+      findings = @config.analyzer_registry.analyze(context, @config)
+      
+      # Check and report findings
+      check_and_report!(context, findings)
+      
       [status, headers, proxied_body]
     ensure
+      Thread.current[:query_guard_context] = nil
       Thread.current[:query_guard_stats] = nil
     end
 
@@ -75,24 +79,48 @@ module QueryGuard
       end
     end
 
-    def check_and_report!(env)
+    def check_and_report!(context, findings)
+      # Check findings and legacy stats for backward compatibility
       stats = Thread.current[:query_guard_stats] || { count: 0, violations: [] }
-      violations = stats[:violations].dup
+      legacy_violations = stats[:violations].dup
 
-      if @config.max_queries_per_request && stats[:count] > @config.max_queries_per_request
-        violations << { type: :too_many_queries, count: stats[:count], limit: @config.max_queries_per_request }
+      return if findings.empty? && legacy_violations.empty?
+
+      # Log all findings
+      findings.each do |finding|
+        message = format_finding_message(finding)
+        logger.warn(message)
       end
 
-      # post-request checks (unusual pattern + exfil based on response bytes)
-      QueryGuard.exporter.export!(stats) if QueryGuard.respond_to?(:exporter)
-      QueryGuard::Security.post_request_checks!(env, stats, @config)
+      # Log legacy violations for compatibility
+      legacy_violations.each do |v|
+        message = format_legacy_message(v, stats)
+        logger.warn(message)
+      end
 
-      return if violations.empty?
+      # Raise if configured
+      if @config.raise_on_violation && (!findings.empty? || !legacy_violations.empty?)
+        message = format_summary_message(findings, stats)
+        raise QueryGuard::Error, message
+      end
+    end
 
-      message = format_message(stats, violations)
-      logger.warn(message)
+    def format_finding_message(finding)
+      "#{@config.log_prefix} [#{finding.severity.upcase}] #{finding.analyzer_name}:#{finding.rule_name} - #{finding.message}"
+    end
 
-      raise QueryGuard::Error, message if @config.raise_on_violation
+    def format_legacy_message(v, stats)
+      details = case v[:type]
+                when :too_many_queries
+                  "too_many_queries: count=#{v[:count]} limit=#{v[:limit]}"
+                when :slow_query
+                  "slow_query: #{v[:duration_ms]}ms SQL=#{truncate_sql(v[:sql])}"
+                when :select_star
+                  "select_star: SQL=#{truncate_sql(v[:sql])}"
+                else
+                  v[:type].to_s
+                end
+      "#{@config.log_prefix} queries=#{stats[:count]} total_ms=#{stats[:total_duration_ms].round(2)} | #{details}"
     end
 
     def format_message(stats, violations)
@@ -124,6 +152,11 @@ module QueryGuard
       end.join(" | ")
 
       "#{@config.log_prefix} queries=#{stats[:count]} total_ms=#{stats[:total_duration_ms].round(2)} resp_bytes=#{stats[:response_bytes]} | #{details}"
+    end
+
+    def format_summary_message(findings, stats)
+      details = findings.map { |f| "#{f.analyzer_name}:#{f.rule_name}" }.join(", ")
+      "#{@config.log_prefix} violations: #{details}"
     end
 
     def truncate_sql(sql, max = 200)

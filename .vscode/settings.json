@@ -1,0 +1,8 @@
+{
+  "chat.tools.terminal.autoApprove": {
+    "/^ruby -c spec/uploader/uploader_system_spec\\.rb; echo \"Test syntax OK\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  }
+}

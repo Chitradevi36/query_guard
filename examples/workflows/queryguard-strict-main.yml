@@ -1,0 +1,54 @@
+name: QueryGuard - Strict (Main Branch)
+
+# Strict workflow: High-sensitivity checks for production
+# Use this for: Main branch, pre-deployment verification
+# Threshold: warn (catches more issues)
+# Blocks: Critical + Error + Warnings
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'db/migrate/**'
+
+jobs:
+  strict-check:
+    name: Strict migration safety check
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+
+      - name: Run strict check
+        run: bundle exec queryguard check db/migrate --threshold warn
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+
+      - name: Notify if issues
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.issue.number || 'deployment';
+            console.log('⚠️ Risky migrations detected in main branch');
+            console.log('Run locally: bundle exec queryguard analyze db/migrate --verbose');

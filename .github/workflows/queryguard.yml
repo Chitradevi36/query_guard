@@ -1,0 +1,106 @@
+name: QueryGuard Migration Safety Check
+
+on:
+  pull_request:
+    paths:
+      - 'db/migrate/**'
+      - 'Gemfile'
+      - 'Gemfile.lock'
+      - '.github/workflows/queryguard.yml'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'db/migrate/**'
+      - 'Gemfile'
+      - 'Gemfile.lock'
+
+jobs:
+  migration-analysis:
+    name: Analyze Database Migrations
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+        env:
+          BUNDLE_GEMFILE: Gemfile
+
+      - name: Run QueryGuard analysis
+        run: bundle exec queryguard analyze db/migrate --verbose
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+
+      - name: Run QueryGuard check
+        run: bundle exec queryguard check db/migrate --threshold error
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+
+      - name: Export findings (if analysis shows issues)
+        if: failure()
+        run: |
+          echo "## Migration Analysis Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Run this locally for more details:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "bundle exec queryguard analyze db/migrate --json" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  migration-check:
+    name: Gate Deployment on Migration Safety
+    runs-on: ubuntu-latest
+    needs: migration-analysis
+    if: always()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+        env:
+          BUNDLE_GEMFILE: Gemfile
+
+      - name: Check if migrations are safe to deploy
+        run: |
+          bundle exec queryguard check db/migrate --threshold error
+          echo "✅ All migrations passed safety checks" >> $GITHUB_STEP_SUMMARY
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ Database migrations passed QueryGuard safety checks.\n\nRun locally to verify:\n```bash\nbundle install\nbundle exec queryguard check db/migrate\n```'
+            })

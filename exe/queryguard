@@ -1,0 +1,23 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Handle --version early (before loading Rails)
+if ARGV.first == '--version' || ARGV.first == '-v'
+  $LOAD_PATH.unshift File.expand_path('../../lib', __FILE__)
+  require 'query_guard/version'
+  puts "QueryGuard v#{QueryGuard::VERSION}"
+  exit 0
+end
+
+# Now load everything else
+$LOAD_PATH.unshift File.expand_path('../../lib', __FILE__)
+require 'query_guard'
+require 'query_guard/cli'
+
+begin
+  QueryGuard::CLI.run(ARGV)
+rescue => e
+  puts "Error: #{e.message}"
+  puts e.backtrace.join("\n") if ENV['DEBUG']
+  exit 1
+end
