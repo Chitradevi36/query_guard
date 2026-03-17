@@ -12,9 +12,11 @@ module QueryGuard
 
         # Run all detectors
         risks.concat(detect_unsafe_index_additions(migration_content, migration_name))
+        risks.concat(detect_concurrent_index_without_disable_ddl(migration_content, migration_name))
         risks.concat(detect_table_locking_operations(migration_content, migration_name))
         risks.concat(detect_non_null_additions(migration_content, migration_name))
         risks.concat(detect_full_table_updates(migration_content, migration_name))
+        risks.concat(detect_data_backfill_in_migration(migration_content, migration_name))
         risks.concat(detect_unsafe_raw_sql(migration_content, migration_name))
 
         risks
@@ -29,6 +31,8 @@ module QueryGuard
         # Find all add_index occurrences
         lines = content.lines
         lines.each_with_index do |line, index|
+          # Skip commented-out lines
+          next if line.strip.start_with?("#")
           next unless line.include?("add_index")
 
           # Check if line includes algorithm: :concurrently
@@ -46,6 +50,105 @@ module QueryGuard
                 operation: "add_index",
                 risk_level: :high,
                 locking: true
+              }
+            }
+          end
+        end
+
+        risks
+      end
+
+      # Detect algorithm: :concurrently without disable_ddl_transaction!
+      # This is necessary for PostgreSQL to allow concurrent index creation
+      def self.detect_concurrent_index_without_disable_ddl(content, migration_name)
+        risks = []
+
+        # Check if migration uses algorithm: :concurrently
+        has_concurrent_index = content.include?("algorithm: :concurrently")
+        return [] unless has_concurrent_index
+
+        # Check if disable_ddl_transaction! is present (but not in a comment)
+        lines = content.lines
+        has_disable_ddl = lines.any? do |line|
+          # Remove comment part
+          code_part = line.split('#').first
+          code_part.include?("disable_ddl_transaction!")
+        end
+
+        unless has_disable_ddl
+          lines.each_with_index do |line, index|
+            # Skip if this line is commented out
+            code_part = line.split('#').first
+            next unless code_part.include?("algorithm: :concurrently")
+
+            risks << {
+              type: :concurrent_index_no_disable_ddl,
+              severity: :error,
+              line_number: index + 1,
+              migration_name: migration_name,
+              title: "algorithm: :concurrently Without disable_ddl_transaction!",
+              description: "Using algorithm: :concurrently requires disable_ddl_transaction! in the migration class to avoid transaction errors.",
+              message: "algorithm: :concurrently found but disable_ddl_transaction! not set",
+              recommendation: "Add `disable_ddl_transaction!` to the migration class definition",
+              metadata: {
+                operation: "add_index",
+                risk_level: :high,
+                module: :schema_safety
+              }
+            }
+          end
+        end
+
+        risks
+      end
+
+      # Detect data backfill / app model usage inside migrations
+      # Migrations that use ActiveRecord models are risky because:
+      # - Models can change independently of migrations
+      # - Queries can fail if code changes
+      # - Large updates lock tables
+      def self.detect_data_backfill_in_migration(content, migration_name)
+        risks = []
+        lines = content.lines
+
+        has_model_usage = false
+        model_usage_lines = []
+
+        lines.each_with_index do |line, index|
+          next if line.strip.start_with?("#")
+          next if line.strip.empty?
+
+          # Detect direct model class usage (User.find_each, Comment.update_all, etc.)
+          if line.match?(/\b[A-Z]\w*\.(find|find_each|find_in_batches|all|where|update|create|delete|update_all|delete_all|execute)\b/)
+            # Skip if it's obviously not a model (like Date, Time, etc.)
+            unless line.match?(/\b(Date|Time|DateTime|Hash|Array|String|Integer|Float|Symbol|Regexp)\b/)
+              has_model_usage = true
+              model_usage_lines << { line_num: index + 1, content: line.strip }
+            end
+          end
+
+          # Also detect batched iterations (common pattern in data migrations)
+          if line.include?("find_each") || line.include?("find_in_batches")
+            has_model_usage = true
+            model_usage_lines << { line_num: index + 1, content: line.strip }
+          end
+        end
+
+        if has_model_usage
+          model_usage_lines.each do |item|
+            risks << {
+              type: :data_backfill_in_migration,
+              severity: :error,
+              line_number: item[:line_num],
+              migration_name: migration_name,
+              title: "Data Backfill Using App Models in Migration",
+              description: "Using ActiveRecord models in migrations is risky because models can change independently. Large data operations should use batching and happen separately from schema changes.",
+              message: "ActiveRecord model usage detected (#{item[:content][0..50]}...)",
+              recommendation: "Move data backfill to a separate rake task or post-deploy job. Use raw SQL with batching if migration-embedded, or use a data migration gem.",
+              metadata: {
+                operation: "data_backfill",
+                risk_level: :high,
+                module: :schema_safety
               }
             }
           end
