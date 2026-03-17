@@ -32,8 +32,21 @@ module QueryGuard
           begin
             file_findings = analyzer.analyze_migration(file)
             file_findings.each do |finding|
-              finding[:file] = file
-              findings << finding
+              # Normalize Finding objects to Hash for Formatter compatibility
+              if finding.respond_to?(:to_json_h)
+                h = finding.to_json_h
+              elsif finding.respond_to?(:to_h)
+                h = finding.to_h
+              else
+                h = finding
+              end
+
+              # Ensure file path is present on the hash
+              if h.is_a?(Hash)
+                h[:file_path] ||= file
+              end
+
+              findings << h
             end
           rescue => e
             puts "Warning: Failed to analyze #{file}: #{e.message}" if @options[:verbose]
